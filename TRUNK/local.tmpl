@@ -1,0 +1,79 @@
+#
+# MAKEFILE TO TUNE BUILD SYSTEM TO LOCAL MACHINE
+#
+# Changes here should be for adjusting build to different
+# library and compiler versions
+
+# Set some text to var to get static binary
+# static_build:=true
+
+# 
+# XXVERSION is used to select library version to use
+# 
+# XXXROOTDIR is a list of directories to search for the
+#   the installation location of the library
+# 
+# NOTE: in XXX.mk XXXVERSION is set using ?= while
+# XXXROOTDIR is set using +=
+# 
+# GOOD PRACTICE IS SET ONLY WHEN NECESSARY
+
+# ------------------------------------------------------------
+# Machine/OS specific LD options
+# LDHOST= -headerpad_max_install_names -dead_strip
+
+# ------------------------------------------------------------
+# Library versions and (likely) locations
+#
+#
+# Intel Math Kernel Library
+# MKLVERSION:=10.2.1.017
+# MKLROOTDIR:=
+
+# ATLAS math library
+# ATLASVERSION:=
+# ATLASROOTDIR:=
+# set following if atlas libraries have a name suffix eg '_atlas'
+#ATLAS_SUFFIX:=
+
+
+# GNU BLAS/LAPACK library 
+# GSLVERSION:=
+# GSLROOTDIR:=
+
+# ------------------------------------------------------------
+# Compiler version selection
+GCCVER:=-4.2
+CXXFLAGS+=-DHAVE_BACKTRACE
+# INTELVER:=
+
+# ------------------------------------------------------------
+# Reset flags to be set in the following makefiles
+RANDFLAGS= 
+LAPACKINC= 
+LAPACKLIB_STATIC= 
+LAPACKLIB= 
+
+# ------------------------------------------------------------
+# The following must be called after the above definitions.
+# ------------------------------------------------------------
+# Select compiler specific makefile
+
+#-include gcc.mk
+-include intel.mk
+
+# ------------------------------------------------------------
+# Select maths library specific makefile
+
+-include mkl.mk
+#-include atlas.mk
+
+# ------------------------------------------------------------
+# Select random number library (SFMT or dSFMT)
+# Comment out to use C++ standard std::tr1::mersenne_twister
+# if that is preferred and available.
+
+# -include sfmt.mk
+
+
+

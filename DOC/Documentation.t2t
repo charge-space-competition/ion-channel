@@ -1,0 +1,566 @@
+Ion Channel Simulation program version 17.1
+Justin Finnerty
+April 2013
+%!postproc(html): {{(.*?)}} <\1>
+%!postproc(tex): '\\{\\{(.*?)\\}\\}' ' '
+%!postproc(html): '``(.*?)``'  '<span style="font-family:monospace,courier;">\1</span>'
+%!postproc(tex): '``(.*?)``'  '\\texttt{\1}'
+%!postproc(html): '[*][*](.*?)[*][*]'  '<span style="font-style:italic;">\1</span>'
+%!postproc(tex): '[*][*](.*?)[*][*]'  '\\textit{\1}'
+%!postproc(html): '\^\^(.*?)\^\^'  '<span style="vertical-align:super">\1</span>'
+%!postproc(tex): '\\\^\{}\\\^{}(.*?)\\\^{}\\\^{}'  '$^{\1}$'
+%!postproc(html): ',,(.*?),,'  '<span style="vertical-align:sub">\1</span>'
+%!postproc(tex): ',,(.*?),,'  '$_{\1}$'
+%!postproc(tex): '\{\|l\|l\|\}'  '{|p{0.25\\textwidth}|p{0.65\\textwidth}|}'
+%!postproc(tex): '\{\|[rcl]\|l\|l\|l\|\}'  '{|p{0.14\\textwidth}|l|p{0.1\\textwidth}|p{0.55\\textwidth}|}'
+# ----------------------------------------------------------------------
+# This source file is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# --------------------------------------------------------------------
+
+
+
+
+= Foreword =
+
+This documentation is currently incomplete.  This program is not
+yet intended to be used without help from someone who is already a
+user.  This document also does not discuss the physics behind the
+model.  As it stands this document is more of a reference for
+existing users of the program.  Constructive suggestions and
+contributions to this document are welcome.
+
+= Introduction =
+
+This program provides an ab initio simulation of an ion channel
+based only on electrostatic interactions and volume exclusion.  This
+version of the code allows you to generate energy profiles, ion
+density profiles amongst other outputs.  From the ion density
+profiles when two cations are present you can determine relative
+occupancy data from which you can determine ion selectivity.
+
+The ion channel is defined by the solid of rotation of a rectangle
+with rounded corners, giving a toroidal shape.  The membrane is
+defined by walls perpendicular to the axis of rotation and coincident
+with the ion channel ends.  Charged ions are represented as
+hard-spheres which may not overlap with anything.  The induced
+charge on the interfacial surface between the ion channel and solvent
+is calculated by discretizing the surface into a series of small
+tiles and performing an ICC computation at program startup to
+generate a response matrix (the ``A`` matrix), this matrix and
+position of the charged ions is then used to calculate the induced
+charge localized on each tile.
+
+= Running the program =
+
+The program is now fully controlled from the input file.  
+The program requires an input file with a name based on
+``channel.inp`` (see [New input file #newinput] below) in the 
+directory from which it is run. 
+
+The program has one required command line argument that must be a number between ``1``
+and ``999``.  This is the simulation run number.  For output this number is included
+in output filenames to distinguish different simulations.  For input, the program
+looks for a file in the current directory based on ``channel.XXX.inp`` where XXX is
+a three digit number such as ``001`` that matches the command line argument, 1 in this case.
+If there is no such file it looks for the default filename ``channel.inp``.
+
+A second optional number may be used to specify a seed value for the
+random number generator.  If this second number is not supplied
+then the run number is used.  This allows the user to reproduce exactly earlier runs.
+//The program irand exists in the utility directory to generate a suitable
+initial random number.//
+
+= Features =
+
+New features in this release include:
+
+- Localisation of structural ions.
+
+- Inline estimation of chemical potentials.
+
+- //Costless// free energy profiles.
+
+- New input file.
+
+- Self adjusting step size
+
+
+
+== Localisation of structural ions ==
+
+This version of the program introduces to restrict the motion of
+structural ions in one of three ways.
+
+: ""channel-only""
+This is the previous restriction method where all
+the structural ions may occur anywhere within the same region of
+the pore.
+
+: ""free""
+This allows ions to be placed in any non-overlapping locations.  
+These are not structural ions.
+
+: ""mobile""
+This allows ions to have the same restrictions as
+channel-only ions plus a spring-like potential pulling them towards
+an individually assigned point.
+
+: ""flexible""
+This allows ions to have the same restrictions as
+mobile without the restriction of channel-only, i.e. they are only 
+restricted by a spring-like potential pulling them towards
+an individually assigned point.
+
+
+== Inline estimation of chemical potentials ==
+
+During the equilibration/thermalisation phase of the calculation
+the program adjusts the input chemical potentials to achieve the
+requested concentrations.  How close the input chemical potentials
+have to be depends on the length of the requested equilibration
+phase.  The program can also be requested to perform a bulk simulation
+with periodic boundary conditions to determine the chemical potentials.
+
+
+
+== **Costless** free energy profiles.  ==
+
+The program can be requested to create free energy profiles based
+on the Widom insertion method.  These trials are performed at each
+checkpoint/save point.  If the simulation is using individual
+addition/deletion of solute ions then the program will incorporate
+the information from the individual ion additions into the Widom
+samples.  As the user specifies a minimum number of insertion trials
+per checkpoint/save point, setting this to a low value (or zero)
+can mean the program may get all the data it needs from the individual
+addition trials.
+
+
+
+== New input file ==[newinput]
+
+The program is now fully controlled from the input file.  This input
+file has a series of named sections containing name/value pairs.
+The sections can appear in any order.  In most cases the name/value
+pairs can also appear in any order.  Optional values can be omitted.
+There is a special keyword ``include`` that allows you to include
+other input files into the current file.
+
+Additionally the input file name defaults to ``channel.inp``.  The
+program requires a //run-number// command line argument that is
+converted into a three digit run-label (the run number optionally
+preceded by zeros to get three digits) that is used to distinguish
+output files from different simulations.  Incorporating this run-label
+into the input file name (as in ``channel.001.inp``) will cause the
+program to use such a file that matches its run-label.
+
+Taken together this allows you to run a series of calculations by
+placing any unchanging information in one or more files then including
+this file with per-run information into a file that includes a
+run-label in its name.  If the run numbers are consecutive this can
+allow you to use queue system job arrays to run sets of simulations.
+
+
+== Self adjusting step-size ==
+
+A simulation consists of a number of simulation steps.  Within each
+step a certain number of simulation trials are made.  A trial, a
+step and the checkpoint/save describe the three levels at which
+data is accumulated.  Only information from simulation variables
+is collected per-trial.  At each step some simple derived information
+is collected.  Per checkpoint/save complex derived information like
+occupancy is computed.
+
+As the problem size increases the number of trials required to
+sample a given space increases.  For example consider the chance
+of getting a ``tail`` when tossing a coin four times compared to
+the chance of getting a ``six`` when rolling a dice four times.
+This is related to the //mixing// time of the system and for Markov
+chains is found to be proportional to the degrees of freedom.  The
+program grossly simplifies the estimate of the degrees of freedom
+to three degrees for the 3D movement of a particle and one degree
+for the variable charge on an ICC surface tile.  This number is
+then used to scale the number of trials used in a single simulation
+step.  This number of trials is printed in the simulation preamble
+so the total number of trials can be calculated.
+
+
+= Input file format =
+
+The input file is a plain text file containing labelled sections
+which contain simulation parameters in name/value pairs.  The
+sections may appear in any order.  The parameters may also, with a
+few exceptions, appear in any order.  Some of the sections and
+parameters are optional.
+
+If the program detects an error in the input file or an
+inconsistency of the parameters it will write an error message
+to the log file detailing the problem and optionally
+giving a suggestion on how to fix it.
+
+The input file may contain comments that are started using the
+``'#'`` character.  If this character appears anywhere in an input
+line, it and all text following it will be ignored by the 
+program.  This includes quoted strings so the ``'#'`` can not
+be used anywhere except as the start of a comment.
+
+The input file may also include other files (which may also include
+other files!).  This allows the user to split input up with the
+following restrictions.  The program allows a maximum nesting level
+(which is only likely to be reached if you have an inclusion loop).
+The include can not appear inside a section and a section can not
+be split up across files.
+
+The name/value pair parameter definition consists of a single word
+name and a value.  The pair can be separated by whitespace or ``'='``.
+If an ``'='`` appears anywhere in the input line it is used to split
+the line into a name and value.  As with ``'#'``, the ``'='`` can not be
+used anywhere except to separate the name and value.  Example input
+files will use whitespace to separate the name/value pairs.
+
+
+Due to restrictions of Fortran input statements the following
+format directives must be used for any parameter value.
+
+| Input type | Format |
+| Integers | Do not use thousands markers within number.
+| Real numbers | Requires a decimal point even for whole numbers.
+| Text | Quoting text is completely optional, text quoted using " or ' will have the quotes removed. Multiline text is **not** supported.
+| Boolean | Use the Fortran like ``.true.`` and ``.false.`` text
+
+
+
+The following describes words that have special meaning outside any
+section.  This is followed by an alphabetical list of the sections
+
+
+
+| Top-level label | Description |
+| ``fileversion`` number | Input file version number.  Currently this is ``1`` and is completely optional.
+| ``include`` filename | This reads in the content of the given file.  Note that filenames are always relative to the original file.  This is generally only an issue when you have files included within a second file.
+| ``accum``, ``channel``, ``geom``, ``patch``, ``salt``, ``specie`` or ``trial`` | These are section labels that start a section.  The ``specie`` and ``salt`` sections appear once for each ion specie and salt present in the simulation, the other may appear only once.
+| ``end`` | This terminates a section.
+
+
+
+== Section ``accum`` ==
+
+This provides parameters for controlling the accumulation of sampled
+data.  It may only appear once in the input file.  The following
+table describes the name-value pairs that may appear in this section.
+
+| Name | Req. | Type | Description |
+| ``drg`` | Yes | Real | The interval spacing in the r direction.
+| ``calgin`` | Yes | Boolean | When /true/ collect 2D samples in z and r directions. 
+| ``calrdf`` | Yes | Boolean | Collect radial distribution information for ions in the channel.
+| ``calacc`` | Yes | Boolean | Collect information about trial acceptances.
+| ``calmob`` | Yes | Boolean | Collect information about the motion of mobile structural ions.
+| ``calwid`` | Yes | Boolean | Use the Widom insertion method to collect free-energy data.
+| ``iwidom`` | Yes | Integer | The minimum number of Widom trials per 1000 simulation steps.
+| ``isave`` | Yes | Integer | The number of iteration steps between saves/checkpoints.
+| ``zocc`` | Yes | Real | The length of the pore in which to sample occupancy. (see geom section for details of specifying lengths)
+
+
+
+== Section ``channel`` ==
+
+This provides parameters that control global aspects of the
+calculations.
+
+| Name | Req. | Type | Description |
+| ``kelvin`` | Opt | Real | The temperature of the simulation (in Kelvin)
+| ``multiconf`` | Opt | Real | When set to true, the simulation checkpoint file saved during the checkpoint/save will no longer overwrite the previous file, instead each filename will include a sequence number.
+| ``name`` | Opt | Text | Textual title for the simulation.
+| ``nstep`` | Yes | Integer | The total number of simulation steps.
+| ``naver`` | Yes | Integer | The number of simulation steps in the equilibration/thermalisation phase.
+| ``usepot`` | Yes | Boolean | Whether to start the simulation with the chemical potentials in the input file or do a bulk simulation before the main simulation.
+
+
+
+== Section ``geom`` ==
+
+The geometry of the ion channel is defined by only five parameters.
+The limitation on all structural ions is another parameter.  The
+number of particles, the ionic strength and the cell dimensions are
+mutually related.  Allowing the third parameter to be calculated
+from the other two.  The ionic strength is required, making one of
+the other two settings optional.  If all three are defined the
+number of particles is given priority and the cell dimensions are
+overridden.
+
+Within the simulation cell are four key regions.  These regions are
+co-linear nested cylinders.  They are conventionally called:
+``zlim`` (or ``zocc`` in older versions), ``filt``, ``chan`` and
+``bulk``. 
+
+**Note** All length specifications are assumed to be in Angstrom.
+
+
+|  Name | Req. | Type | Description |
+| ``dzg`` | Yes | Real | The interval spacing in the z direction. (counterpart to drg in ``accum`` section). 
+| ``zl1`` | Yes | Real | The half-length of the cylindrical section of the pore.
+| ``rl1`` | Yes | Real | The radius of the cylindrical section of the pore.
+| ``rl4`` | Yes | Real | The radius of the outer cylinder of the ion channel protein.
+| ``rlvest`` | Yes | Real | The radius of the arc between the cylindrical section of the pore and ion channel end surface  (The vestibule).
+| ``rlcurv`` | Yes | Real | The radius of the arc between the outer cylinder (``zl4``) and the ion channel end surface. 
+| ``rl5`` | Yes | Real | The suggested radius of the total cylindrical simulation cell.
+| ``zl4`` | Yes | Real | The suggested half-length of the total cylindrical simulation cell.
+| ``zlimit`` | Yes | Real | The half-length along the z-axis that structural ions are allowed to move.
+| ``ntarg``  | Yes | Integer | The target number of molecules.
+| ``name`` | No | Text list | The names to use in the output for the four key regions
+| ``oldreg`` | No | Boolean | Whether to use region boundaries as defined in previous version or version first defined in this program.
+
+
+
+**Note** for previous users that ``zocc`` has been renamed to
+``zlimit``.  Now ``zocc`` is used in the ``accum`` section to specify
+the occupancy sampling region only.
+
+=== Geometry definition ===
+
+The channel geometry in this version is defined by the volume of
+rotation of a rectangle with rounded corners.  The axis of rotation
+is always parallel to one axis of the rectangle and is defined as
+the z-axis of the coordinate system.  When considering the system
+in two dimensions, the r-axis is parallel to the other axis of the
+rectangle.  In three dimensions the z-axis is shared and the other
+coordinates related by ``r^^2^^ = x^^2^^ + y^^2^^``. 
+
+In the input the
+parameter ``rl1`` defines the shortest distance between the axis
+of rotation and the rectangle and parameter ``rl4`` is the distance
+to the further edge, thus the width of the rectangle is 
+``rl4 - rl1``.  The length of the straight-line portion of the side nearest
+the rotation axis is twice ``zl1``, the half-way point defining the
+zero-point on the z-axis.  The radius of the rounded corners closest
+to the rotation axis is defined by ``rlvest``, the outer corners
+by ``rlcurv``.  Thus the total length of the rectangle is 
+``2(rlvest + zl1)``.  The membrane is defined by lines in the r-direction
+coincident with the ends of the rectangle.
+
+=== Region definition ===
+
+The inner-most cylinder (``zlim`` or ``zocc``) defines a region of
+the channel pore into which all the structural ions are limited.
+The half-length of this cylinder is defined by ``zlimit``.  This
+length must be less than or equal to ``zl1``.  The cylinder radius
+is ``rl1``.  The second cylinder (``filt``) is defined by the
+cylinder of the pore, which is given by ``zl1`` and ``rl1``.  The
+third cylinder encompasses all the volume of the pore and is thus
+defined by a radius of ``(rl1 + rlvest)`` and half length of 
+``(zl1 + rlvest)``.  The fourth cylinder is defined as the entire simulation
+cell thus defined by ``rl5`` and ``zl4``.
+
+There are two choices for the exact boundaries of two of the inner
+cylinders.  The inner-most region is always defined by ``zlimit``
+and ``rl1``, with inclusion requiring all of the particle to be
+within the region.  With the next two regions you have a choice.
+If ``oldreg`` is true then the boundaries are extended for each ion
+specie so that presence in the region is defined by the position
+of the ion's centrepoint, giving a half-length of ``zl1 + r,,specie,,``
+and ``zl1 + rlvest + r,,specie,,`` respectively.  If ``oldreg`` is
+false (the default) then presence in a region is defined as any
+part of an ion is in the region, giving a larger half-length of
+``zl1 + 2.r,,specie,,`` and ``zl1 + rlvest + 2.r,,specie,,`` respectively.
+This also means the radius of the third region is extended to 
+``rl1 + rlvest + r,,specie,,``.  This new region definition was introduced
+because add/remove attempts are made by region and the older
+definition gives too few insertion attempts at these boundaries
+resulting in a minima in particle density that persists for some
+time into the simulation.  This is particularly noticeable at the
+channel ends where there is a large discrepancy in the density of
+insertion attempts between the channel region and bulk region.  A
+minima is also present in the overlap between the inner-pore regions
+and the total channel region, though to a greatly lesser extent.
+The newer region definitions elminate these minima and provide a
+smooth transition between the channel densities and the bulk densities
+from the beginning of the simulation.
+
+
+== Section ``patch`` == 
+
+This defines the parameters to use for calculating the electrostatic
+interactions.  Reasonable default values are predefined so the
+section is optional as are all the parameter within the section.
+The word patch is a synonym for the surface tiles used in the ICC
+calculation of surface charges.  The first two parameters 
+control the generation of the tiles.  As the region of most interest
+is the part closest to the axis of rotation, tile sizes are not uniform
+across the entire surface, increasing semi-proportionally
+to displacement along the r axis.
+
+
+| Name | Req. | Type | Description |
+| ``dxf`` | No | Real | Parameter controlling tile size in the direction around the rotation axis.
+| ``dxw`` | No | Real | Parameter controlling tile size in the z,r plane.
+| ``nsub`` | No | Integer | Parameter controlling the mesh size of the initial surface integration.
+| ``epsw`` | No | Real | The permittivity constant of the solvent (defaults to 80.0)
+| ``epspr`` | No | Real | The permittivity constant of the protein (defaults to 10.0)
+
+
+ 
+== Section ``salt`` ==
+
+Parameters defining one of the salts to be used in the simulation.
+In this program chloride is always assumed to be the anion.  Specifying
+any other anion will result in program termination.
+
+| Name | Req. | Type | Description |
+| ``name`` | Alt | Text | Four letter code for the salt made up from a two letter cation code and ``Cl``.
+| ``cation`` | Alt | Text | Two letter code for the salt's cation. Either ``cation`` or ``name`` must be used.
+| ``ratgr`` | Yes | Real | Relative probability that this salt will be chosen for creation/deletion trials
+| ``ctarg`` | Yes | Real | The target molar concentration of this salt.
+
+
+== Section ``specie`` ==
+
+Parameters describing one of the ionic species in the simulation.  There
+must be a section for each solute specie and each set of structural ions.
+There must be one section for chloride and one for each cation specified
+in a salt section.  The two letter code for a specie is case sensitive.
+For the cations of a salt this code must match the code used in the salt.
+The rate/chance parameters are required or optional depending on the 
+type of a specie, for example a ``fixed`` specie requires no rate information.
+
+| Name | Req. | Type | Description |
+| ``name`` | Yes | Text | Two letter code for the ion. This is used to match to a salt section and to identify the specie in the output.
+| ``ratspc`` | Check | Real | Relative rate that this specie is selected for a trial
+| ``ratmov`` | Check | Real | Relative rate between moving, or adding/deleting a particle
+| ``ratexc`` | Check | Real | Relative chance between trying channel/bulk exchange or move within the current region
+| ``z`` | Req | Real | Valency/charge of each ion
+| ``d`` | Req | Real | The diameter of the ion
+| ``chex`` | Req | Real | The (approximate) excess chemical potential for the species at the target concentraion.
+| ``type`` | Req | ``free``, ``mobile``, ``flex`` or ``chonly`` | Categorise the specie as a solute (free) or one of the structural ion types. Only the first three characters are required.
+| ``ratgr`` | Req | Real | Relative chance this ion will be chosen for creation/deletion trials
+| ``ratreg`` | Req | 4 x Real | Relative chance of adding/deleting this ion (and also the salt if this is a cation) to a particular region
+| ``n`` | Opt | Integer | Indicate the number of particle position definitions that follow. (see below)
+
+
+
+=== Particle position specifications ===
+
+Particle positions can be described directly in the input file for
+all species.  This is optional for solute ions and required for all
+structural ions.  The input positions must be valid positions for
+the particles or the program will exit with an error message.
+
+The particle specification for all specie types apart from ``mobile``
+consist of the x,y,z coordinates of the particle.  The x and y axes
+may be arbitrarilly defined, however the z-axis is co-linear with
+the channel pore axis.  For ``mobile`` ions the specification may
+consist of four and an optional additional three numbers.  The first
+three numbers specify the starting x,y,z coordinates of the particle.
+The fourth is the cutoff radius.  If present the optional numbers
+are the x,y,z coordinates of the mobile ion's localisation centre-point.
+If they are not present then the particles initial coordinates are
+also used for the localisation centre-point.
+
+An example mobile ion specification is shown below.  It is the
+hypothetical entry for the two oxygen ions of a carboxylic acid.
+We want to set the localisation points at +1 and -1 along the z-axis
+to match an X-ray structure.  However the ions have a diameter of
+2.8 so we specify the second particle as starting 3 Angstrom away
+from the first and use the optional coordinates to specify the
+localisation centre-point.
+
+
+```
+n 2
+0. 1.0 1.0 4.0
+0. 1.0 -2.0 4.0 0. 1.0 -1.0
+```
+
+Note that when specifying solute ions the number of ions
+input need not exactly match the number the program calculates 
+from the target particle number and ionic strength.  If the
+program thinks the number of particles specified is close
+enough to the target number it will use the particles specified.
+If there are too many particles specified then the program will
+stop with an error message.  It there are too few particles
+then the program will randomly insert additional particles.
+
+
+
+
+== Section ``trial`` ==
+
+The parameters that control details of making a simulation trial
+
+|  Name | Req. | Type | Description |
+| ``mobk`` | Opt | Real | The global spring-constant for ``mobile`` type species
+| ``drmaxin`` | Yes | Real | The size of steps for small-displacement moves within the channel
+| ``drmaxout`` | Yes | Real | The size of steps for small-displacement moves outside the channel
+| ``ratmov`` | Yes | Real | The relative chance of performing a move out of move, salt create/destroy or individual create/destroy trials.
+| ``ratslt`` | Yes | Real | The relative chances of performing a salt create/destroy out of move, salt create/destroy or individual create/destroy trials.
+| ``ratind`` | Yes | Real | The relative chances of performing a individual create/destroy out of move, salt create/destroy or individual create/destroy trials.
+
+
+
+
+= Simulation outputs =
+
+The program write output files into two subdirectories of the calculation
+directory.  In the ``dat`` directory it saves information useful for
+restarting a calculation.  In the ``res`` directory are the simulation
+output data files.  These directories must exist before the program
+is started or it will stop.  I suggest using a startup shell script
+that checks for and creates these directories before running the
+channel program.  Each file is labelled using the current run number,
+for example ``001`` for run 1.
+
+
+The ``dat`` directory contains the inverted ``A`` matrix (``amx.001.dat``)
+and files in the input file format that contain the complete
+simulation definition at the starting point (``conf.001.inp``), after
+the equilibration (``equil.001.inp``) and at the latest checkpoint/save
+(``channel.001.inp``).  To restart a job you can copy the ``channel.001.inp``
+file from ``dat`` to the calculation directory to use as the starting input file.
+When run the program will then read in any ``amx.001.dat`` present, if the
+parameters used to create the data in ``amx.001.dat`` are different
+to the current input parameters then the data in ``amx.001.dat`` will
+be discarded and a new calculation of the ICC matrix performed.
+This new data will then be overwritten to ``amx.001.dat``.
+
+In the ``res`` directory are a large number of files containing the
+data collected from the simulation.  Currently the only way to know
+exactly what the fields in each file mean is to read the ``accum.f90``
+source file.  In the following table I present some key file.  I
+use the specie code ``Cl``, the region label ``filt`` and the run
+number ``001`` to specify a filename but these can be interchanged
+with any other run number, region or specie code.
+
+| File name | Contents |
+| ``gin-Cl.001`` | 2D (z and r dimensions) particle distribution near the channel.
+| ``gz-Cl.001`` | z-dimension particle distribution over the simulation cell
+| ``rdf-Cl-Cl.001`` | Radial distribution between chloride and chloride ions
+| ``o.001`` | The summary of the simulation at the last checkpoint
+| ``occvol.001.dat`` | The series of occluded-volumes in slices of the filter one row per checkpoint.
+| ``gfilt-Cl.001`` | The series of chloride occupancy in the filt region, one row per checkpoint.
+| ``afilt-Cl.001`` | The series of chloride density in the filt region, one row per checkpoint.
+
+
+
+= Utility programs =
+
+Included in the source directory is two subdirectories for
+files and programs thay may be useful when using the channel
+program.  The 'plot' directory contains a series of gnuplot
+input files that may be used as starting points for graphing
+the results. The 'utilities' directory contains a series of
+scripts and source code for useful for setting up or
+post-processing a simulation.  The documentation for these
+utilities should be at the top of each file.
+
+
+
