@@ -1,0 +1,1 @@
+../../TRUNK/sfmt.mk

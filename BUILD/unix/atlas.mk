@@ -1,0 +1,1 @@
+../../TRUNK/atlas.mk

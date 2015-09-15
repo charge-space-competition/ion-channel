@@ -1,0 +1,614 @@
+IONCH Simulation HOWTO
+Justin Finnerty
+February 2013
+
+# ----------------------------------------------------------------------
+# This source file is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# --------------------------------------------------------------------
+
+
+= Foreword =
+
+- This document does **not** cover generating the input files.  Some
+example files are in the ``example`` sub-directory of the ionch source
+tree.  The input files are covered in more detail in ``Documentation.t2t``
+or  ``Documentation.html``.  The ``channel`` program itself attempts to
+give assistance on writing valid input files when it detects an error
+in the input.
+
+- This document does **not** cover details of running each program
+described.  Any documentation for the individual programs should be
+consulted for that purpose.  In general the programs should print some
+basic help text when given the ``-?`` or ``-h`` flag.
+
+- This document **is** an introductory HOWTO guide on how to perform and
+interpret simulations using the ``channel`` program.  It covers some
+elements of the input file only as they pertain to optimising and adjusting
+your simulation run.
+
+
+
+= Basics of running a simulation =
+
+== Simulation Running ==[sec-simrun]
+
+I use the capability of the ionch //channel// program to pick input files
+\based on the run number.  This means I create files named ``channel.001.inp``,
+``channel.002.inp`` etc. each containing one of the set of similar
+simulations I am interested in.  I may also duplicate some input files and
+give them a different number so that I can run the same simulation more
+than once in parallel.
+
+When running the simulation I capture the output from the program as it
+contains information about the quality of the simulation run that is not
+provided elsewhere.  It also provides a back-up data source for post
+processing.
+
+In general I run my simulations using a script similar to the following
+
+```
+ #!/bin/bash
+ if ! ( echo "${LD_LIBRARY_PATH:-ASDFG}" | grep -q 'mkl'
+); then
+  if [ -d /usr/local/intel/mkl/lib/em64t ]; then
+    LD_LIBRARY_PATH=${LD_LIBRARY_PATH}${LD_LIBRARY_PATH:+:}/usr/local/intel/mkl/lib/em64t
+  fi if [ -d /usr/local/intel/lib ]; then
+    LD_LIBRARY_PATH=${LD_LIBRARY_PATH}${LD_LIBRARY_PATH:+:}/usr/local/intel/lib
+  fi export LD_LIBRARY_PATH
+fi if [ ! -d res ]; then
+  mkdir res
+fi if [ ! -d dat ]; then
+  mkdir dat
+fi
+
+CHANDIR=${HOME}/bin STAMP=`${HOME}/bin/datestamp`
+
+BIN=${CHANDIR}/${CHANNELXX:-channel}
+
+NUM=$1
+
+SEED=$(( `irand32` / 64 ))
+
+echo "${BIN} ${NUM} ${SEED} 1> log.${NUM}.${STAMP}.txt 2> err.${NUM}.${STAMP}.txt"
+
+/usr/bin/time ${BIN} ${NUM} ${SEED} 1> log.${NUM}.${STAMP}.txt 2> err.${NUM}.${STAMP}.txt
+
+```
+
+where:
+
+- irand32: is available in ionch/TRUNK/utilities and simply attempts to
+read a single high quality random number from ``/dev/random``
+
+- datestamp: is a shell script that combines a date with a process id to
+give a unique number for differentiating files.  The use of the date means
+that consecutive calls to datestamp should produce filenames that sort
+in date order.
+```
+#!/bin/sh
+D=`date +%m%d%H`
+/bin/echo -n ${D}$$
+```
+
+
+This script takes the run number as the only argument.  This can be
+combined with the job-array feature of many computing centre job queues
+to submit and run the simulations easily.
+
+== Simulation review ==
+
+Inspection of the log output is the best way to review the health
+and reliability of the simulation.
+
+If the program exits due to an error, the program should print information
+about the problem to the log file and/or the error file.
+
+=== Program version and limits ===
+
+As the program starts it attempts to report details about how it was
+compiled, the program version and details of the running environment.
+This information is very useful when you want to compare results from
+different simulations or different compiler/math library combinations.
+
+For general purposes the important information is the run number and
+the run unique id (UUID). These are reported in the lines:
+```
+ COMMAND LINE ARGUMENTS
+   RUN NUMBER: 1
+  RANDOM SEED: 30124804
+------------------------------------------------------------------------
+# UUID 7CE426372E114DD7B1F44588DEDFAFF1
+```
+Knowing the random seed is also useful as it allows you to rerun the
+simulation using the same random seed value.
+
+The UUID is important as it is written into all output files.  This is
+a second check that particular output files relate to the same simulation
+run.
+
+
+=== Check reading of the input ===
+
+The program echos the input file information as it was interpreted in
+the program.  You should check that the program has understood your input
+as expected.  Some numbers may vary slightly from your input as the
+program prints the normalised rate values and actual geometries and
+particle numbers.
+
+The program output generally follows the sequence of setting up the
+parameters and internal variables related to an input section.  This may
+result in summary or processing output related to the input section.
+This output is then followed by the processed input section.
+
+
+	For example the input file processing begins
+	with setting up the species and salts. This begins with the line
+	
+	``Specie type and salt data summary``
+	
+	and is followed by information about what types of species are present and
+	their initial key parameters. The section is completed by the line
+	
+	``TOTAL IONIC STRENGTH: 0.22``
+	
+	and immediately followed by the input sections after the title line
+	
+	``Interpreted specie, salt and subspecie sections of input``
+
+=== Check structural particle distribution ===
+
+Following the line
+```
+Percentage of filter region volume occupied by structural particles
+```
+is a table listing the volume occluded by structural ions in slices
+along the selectivity filter. This gives some idea of how evenly the structural ions
+are distributed in the initial configuration.
+
+This table is repeated at each reporting interval. It is critical that the
+total occluded volume reported at the bottom of the table is a constant
+throughout the simulation.  The only exception to this is if you use
+the ``flexible`` structural ion type which are a special case of structural
+ions that are allowed to move into and out of the selectivity filter region.
+
+
+=== Check IC and sampling bin sizes ===
+
+- The number of 1D sampling bins is a determinant of how detailed your
+concentration profile results are going to be.  The number of bins is
+determined by the bin width parameter ``dzg`` in the ``geom`` input
+section and the actual length of the simulation. The number
+of bins is reported in the following lines:
+```
+ Parameters for 1D histogram of Z-axis
+    BIN WIDTH  0.100
+    BIN COUNT   3174
+```
+In general I consider 0.1 Angstrom to be a good width. Large
+simulations may require larger bin widths to get below the
+4096 bin limit.  On the other hand smaller simulation could 
+allow you to get more detail using smaller bins.
+
+- If the IC is being used the line:
+
+```
+  NUMBER OF TILES TOTAL    =         ???
+```
+will give the number of tiles to be used in the simulation.  This should
+be checked to make sure it is neither too large or too small.  In general
+I would consider 500 tiles to be a minimum number.  The ``dxf`` and ``dxw``
+variables in the input ``patch`` section control the size of the tiles.
+
+- The number of 2D and 3D sampling bins is a determinant of how
+detailed your analysis of what is happening in the channel are going to be.  The number of bins is 
+determined by the bin width parameter ``drg`` in the ``accum`` input
+section and the actual length of the channel.   
+The number of bins is reported in the following lines:
+```
+ Parameters for 2D histogram of Z-axis and Radius
+ Histogram bins in radial dimension =      201 width =   0.2000
+ Histogram bins in z-axial dimension=      302 width =   0.2000
+ Parameters for 3D histograms of X,Y,Z and R,theta,Z axes
+ Histogram bins in x,y,theta,r dimensions =       46 width =   0.8000
+ Histogram bins in z-axial dimension      =       48 width =   0.8000
+```
+In general I consider 0.1 Angstrom to be a good width. Large
+simulations may require larger bin widths to get below the
+4096 bin limit.  On the other hand smaller simulation could 
+allow you to get more detail using smaller bins.
+
+
+=== Check IC computation ===
+
+The IC computation reports the initial surface charge and the surface area of
+all the tiles in the following way:
+```
+ Initial ICC calculation:
+  Total initial induced charge / e : 0.01844039197187774
+  Total area / Ang^2 = 7248.293163063746761
+```
+The total induced charge should exactly zero, a value greater than +/-0.01 
+probably indicates that your tile size is too large.  For marginal values
+you can look in the ``res/o.XXX`` file to see the section:
+```
+ gauss[a]    = 0.01051197356748145
+  <gauss>     = 6.4073697521371E-06
+  <|gauss|>   = 6.5571160018998E-06
+  Var(gauss)  = 5.9142361750228E-08
+  Var(|gauss|)= 5.9140420367107E-08
+  area        = 7248.293163063746761
+  max(|gauss|)= 0.01481079871651108
+```
+to get a report of the error in the induced charge at the last
+simulation report cycle. Here we can see that the current charge
+is ``0.0105`` and the maximum was ``0.0148`` but the average is
+a small ``6.4 E-06``.
+
+**NOTE** One point to check when rerunning a calculation using
+different tile sizes is that the total tile area remains constant,
+at least upto 6 significant figures.
+
+
+=== Check chemical potential and charge ===
+
+As the program runs it estimates the chemical potential of
+the various species and compares it to the value actually
+used and reports the estimated value and the error.  However, 
+the quality of the estimate is heavily dependent on the number
+of samples for a particular particle type. Thus the most abundant
+types are estimated better than less abundant. Ideally
+the error in the chemical potential should be less than 10%
+of the original value for reasonably abundant types and could
+be over 100% for types with only a few particles.
+
+For example in a 3:1 Ka:Na simulation at 20000 steps we get the following
+table extracts:
+```
+         | ... |      TOTAL
+ Cl ion: | ... |240.440  233
+ Ka ion: | ... |154.776  151
+ K1 ion: | ... | 20.916   22
+ Na ion: | ... | 60.878   56
+ N1 ion: | ... |  0.364    1
+ Charge: | -0.27414
+...
+ SPECIE    TARGET CONC.    CHEM. EXCESS          ERROR.
+     Cl            0.11  0.647843721675  0.006401004505
+     Ka  0.074000150285 -0.231350338314  -0.01603233607
+     K1  0.008999849715 -0.551347236065 -0.008298730243
+     Na  0.026898150399 -0.303264772737  0.047464545828
+     N1  1.01849601E-04          -0.227  0.405102231792
+```
+where the TOTAL column lists the average (N_av) and current (N) number
+for a ion specie. We see the error is ~1% for the most abundant Cl (N_av
+240), 10% for Ka (N_av 155) and ~15% for Na (Na_av 61). For N1 the
+error is very large however there are almost no particles of this type
+(N_av 0.36) present.
+
+The table extracts above also show the total system charge.  Ideally this
+should be close to zero.  It should definitely converge towards zero as
+the simulation proceeds.
+
+
+=== GNUPLOT convergence graphs ===
+
+I use the following graphs to monitor the progress of values in log file
+to see how the simulation has progressed.
+
++ This graph monitors the chemical potential estimation process at the 
+beginning of the simulation. 
+```
+set macros
+
+logfile='"my log file name"'
+cp_ka21 = sprintf('"< awk \"/Excess Chem. Pot. :/ {print \\$5;}\"  %s" u 1 every 3::0 w l lt 3 t "mu_0"', @logfile)
+cp_ka22 = sprintf('"< awk \"/Excess Chem. Pot. :/ {print \\$5;}\" %s" u 1 every 3::1 w l lt 4 t "mu_1"', @logfile)
+cp_ka23 = sprintf('"< awk \"/Excess Chem. Pot. :/ {print \\$5;}\" %s" u 1 every 3::2 w l lt 5 t "mu_0+1"', @logfile)
+np_ka21 = sprintf('"< awk \"/Average and current number:/ {print \\$5;}\" %s" u 1 every 2::0 axes x1y2 lt 1 lw 3 w l t "N_{av,Cl}"', @logfile)
+np_ka22 = sprintf('"< awk \"/Average and current number:/ {print \\$5;}\" %s" u 1 every 2::1 axes x1y2 lt 2 lw 3 w l t "N_{av,Ka}"', @logfile)
+nip_ka21 = sprintf('"< awk \"/Average and current number:/ {print \\$6;}\" %s" u 1 every 2::0 axes x1y2 lt 1 w l t "N_{Cl}"', @logfile)
+nip_ka22 = sprintf('"< awk \"/Average and current number:/ {print \\$6;}\" %s" u 1 every 2::1 axes x1y2 lt 2 w l t "N_{Ka}"', @logfile)
+
+set title "Chemical Potential estimation for KaCl"
+set xlabel "Estimation iteration"
+set ylabel "Excess chemical potential"
+set y2label "Particle count"
+set y2tics 100
+plot @cp_ka21, @cp_ka22, @cp_ka23, @np_ka21, @np_ka22, @nip_ka21, @nip_ka22
+```
+The main difficulty is getting the ``every`` command right.  In this example the log file has
+only ``Ka`` and ``Cl`` ions.  This gives three ``Excess Chem. Pot.`` lines per step (1 for each
+ion and one for ``KaCl`` salt) and two ``Average and current`` lines per step (1 for each ion).
+
+The graph should show the excess chemical potential approach a consistent value, the average 
+particle count remain constant with the current value oscillating around the average.
+
++ This graph monitors the current particle count during a simulation.  All the graphs should
+oscillate around some mean value.
+```
+set macros
+
+logfile='"my log file name"'
+N_ka21 = sprintf('"< awk \"/Cl  ion:/ {print \\$12;}\"  %s" u 1  w l lt 1 t "N_Cl"', @logfile)
+N_ka22 = sprintf('"< awk \"/Ka  ion:/ {print \\$12;}\"  %s" u 1  w l lt 2 t "N_Ka"', @logfile)
+N_ka23 = sprintf('"< awk \"/Na  ion:/ {print \\$12;}\"  %s" u 1  w l lt 3 t "N_Na"', @logfile)
+set title "Current particle count for NaCl + KaCl"
+set xlabel "Estimation iteration (x1000)"
+set ylabel "Particle count"
+plot @N_ka21, @N_ka22, @N_ka23
+```
+
++ This graph monitors the charge as the simulation progresses. Ideally
+it should converge to zero.
+```
+set macros
+
+logfile='"my log file name"'
+charge = sprintf('"< awk \"/Charge:/ {print \\$3;}\"  %s" u 1  w l lt 1 t "Charge"', @logfile)
+set title "Current system charge"
+set xlabel "Estimation iteration (x1000)"
+set ylabel "Charge /e"
+plot @charge
+```
+
+
+
+= Simulation Post-processing =
+
+A python framework exists for reading the generated output files from
+a simulation run.  Built on this framework are a series of programs
+to perform specific post-processing tasks:
+
+== digest.py : One line simulation summary ==
+
+The ``digest.py`` program can be run in one of two ways:
+
+- When run in the simulation directory with no arguments it processes
+any ``res/o.XXX`` files and prints reports all the simulations it finds.
+
+- When run with the ``-i`` flag and a filename it process that single
+filename.  The advantage here is that if the filename is a saved log
+file it will use that as the summary source instead of the ``res/o.XXX``
+file.  This is useful as the ``res/o.XXX`` may be incomplete or corrupted.
+
+
+Here is an example output (the program also prints titles for each column.)
+```
+ Run   Trials    Ratio                              UUID  RootPath Temperature IonicStr     Ions
+   1 1024000 0.966276 "7CE426372E114DD7B1F44588DEDFAFF1" "/Users/finnerty/Documents/Projects/grs400/calc/CNG_channel/GRS1269" "" 0.222980  5 "Na" 0.054440 "Ka" 0.050120 "K1" 0.006220 "N1" 0.000310 "Cl" 0.111890
+   2 1024000 0.345076 "86853E74ED724A4C9083CF7601E37840" "/Users/finnerty/Documents/Projects/grs400/calc/CNG_channel/GRS1269" "" 0.220820  5 "Na" 0.028210 "Ka" 0.072820 "K1" 0.008930 "N1" 0.000150 "Cl" 0.110710
+```
+The format is designed to make the digest easy to import into a spreadsheet.
+These digest lines are also the basis for merging simulations runs.
+
+
+== Result merging ==
+
+Simulations can be run in parallel to increase the total number of trials.
+The ``merge.py`` program is available to merge simulations from several
+runs into a single virtual simulation run.  The merge program trys to
+weight the results of simulations based on the number of trial steps in
+each run. The basic process is as follows:
+
+- The ``digest.py`` program is run to generate a digest for all
+simulation runs you want to merge.
+
+- The digest lines are written into a file with a name like ``res/merge.XXX``
+where the ``XXX`` is the run number of the merged data. This run number should
+not be the same as an existing run as this will cause existing data files
+to be overwritten.  This file should be kept after the simulations are run as
+it is the only record of the individual simulations that went into the merged
+result set.
+
+- The ``merge.py`` program is run to merge the simulations.  Similarly to the
+``digest.py`` program:
+ - when run in the simulation directory without arguments it reads all
+files with names matching ``res/merge.XXX`` and merges each merge set.
+ - if given a single file using the flag ``-i`` (eg ``-i merge.XXX``) it merges the set
+of simulations listed in that single file.
+
+
+All merged results are placed in the same directory as the merge file and
+are given a run number based on the number in the merge file name.  The
+merge program will generate a ``res/o.XXX`` file containing similar data
+to ordinary simulation runs using the appropriate summary of the merged data sets.
+
+The ``merge.py`` program also has options to perform some adjustment of the
+results sets during merging.  For example the total ionic concentration can
+be set causing simulation concentrations to be scaled before merging. 
+
+
+
+== Result Subspecie (hydration) merging ==
+
+For simulations where two particles types are used to represent two
+states of a specie the output results must be combined to get results
+for the combined states after the simulation.  The ``mergesubspecie.py`` program
+is available to do this.
+
+- The ``mergesubspecie.py`` program is run to merge data sets within a the simulation.
+Similarly to the ``digest.py`` program:
+ - when run in the simulation directory without arguments it reads all
+files with names matching ``res/o.XXX`` and merges each merge set.
+ - if given a single log file using the flag ``-i`` (eg ``-i log.XX.txt`` or 
+``-i o.XXX``) it merges the subspecie data sets of that single simulation.
+- You specify the subspecies to be merged on the command line (using ``-m``) as target ion code and
+ sub ions. For example ``-m KK:K1:K2:K3:...:Kn`` will merge sub-ions ``K1``, ``K2`` ... ``Kn`` into target
+ ion ``KK``.
+
+
+All merged results are placed in the same directory as the other result files and
+are given the same run number and UUID as the simulation.
+
+=== Current limitations of the mergesubspecie program ===
+
+The ``mergesubspecie.py`` program is still under development (11/2013) and the following 
+limitations currently exist.
+
+- **Merged datasets**
+ - gz (concentration profile) only
+
+
+== Visualisation of surface tile centres and their charges ==
+
+The surface tile centre-points and normals are stored in the ``dat`` directory in files 
+called ``ptchgeom.XXX.dat``.
+Unfortunately some versions of the program compiled with the Intel compiler mangle this file 
+by splitting the each line into three lines.
+
+Each line should have 8 values: x, y, z, ux, uy, uz, (?initial charge?) and area. If
+the line is split in three you will need to rebuild the lines. One way to do this is to use
+``perl`` to extract every 3rd line and then ``paste`` the three subfiles together using:
+
+```
+perl -ne `print unless ($. % 3)` ptchgeom.001.dat > ptchgeom.001.1.dat
+perl -ne `print unless (($. + 1) % 3)` ptchgeom.001.dat > ptchgeom.001.2.dat
+perl -ne `print unless (($. + 2) % 3)` ptchgeom.001.dat > ptchgeom.001.3.dat
+paste ptchgeom.001.2.dat ptchgeom.001.1.dat ptchgeom.001.3.dat > patch.001.dat
+```
+
+To this geometry information file you need to ``paste`` the average charges 
+in the ``res/h.XXX`` files. This can be done using:
+
+```
+grep -v `#` ../res/h.001 | paste ptchgeom.001.dat - > patch.001.dat
+```
+
+or when you have the three split files:
+
+```
+perl -ne `print unless ($. % 3)` ptchgeom.001.dat > ptchgeom.001.1.dat
+perl -ne `print unless (($. + 1) % 3)` ptchgeom.001.dat > ptchgeom.001.2.dat
+perl -ne `print unless (($. + 2) % 3)` ptchgeom.001.dat > ptchgeom.001.3.dat
+grep -v `#` ../res/h.001 | paste ptchgeom.001.2.dat ptchgeom.001.1.dat ptchgeom.001.3.dat - > patch.001.dat
+```
+
+This can then be visualised in ``gnuplot`` using:
+
+```
+splot "dat/patch.001.dat" using 1:2:3:10 with points pt 7 palette title "Patch centres"
+```
+
+To just see the tile centres and their normals try:
+
+```
+splot "dat/patch.001.dat" using 1:2:3 with lines title "Patch centres", \
+      "<awk `{print \$1,\$2,\$3\"\\n\"(\$1+\$5),(\$2+\$6),(\$3+\$7)\"\\n\\n\"; }` \
+      dat/patch.001.dat" using 1:2:3 with lines title "Normal vectors"
+```
+
+
+= Ion Selectivity =
+
+== Simulation set up ==
+
+To determine the selectivity the simulations should be run over a range
+of concentration ratios between the two cations or anions. The ideal
+range:
+
+- Spans a range ratios of 5 orders of magnitude (e.g. from 1:100 to
+100:1)
+
+- The middle of the range is where the two ions have approximately the
+same occupancy
+
+
+This requires a little trial and error to find the best range.  For
+situations where the difference in selectivity is very large (i.e. 1:100)
+it can be difficult to arrange the full range as the number of the more
+selective particle will become very low.  This may require increasing
+the initial number of particles; I generally try to have a minimum of 5
+particles for each ion, which for a selectivity of 1:100 would mean the
+lowest ratio would be 1:10000 giving a simulation size of 5 + 50000
+cation particles!
+
+
+== Data extraction ==
+
+In the following example we want to determine the selectivity of sodium
+ions over potassium ions in the simulation.  To get the correct result at
+the end requires careful maniupulation of the data and care in the choice of
+ion one and ion two in ``selectivity_extract.py``. The process follows the
+pattern of defining an input file with the desired simulations and giving this
+file to ``selectivity_extract.py`` which takes information from the given
+input file and from the ``gz-XX.XXX`` files to calculate the selectivity.
+
+- The ``digest.py`` program is run to generate a digest for all
+simulation runs you want to calculate the selectivity over.
+
+- If you are calculating the selectivity from merged subspecies then
+you will need merge the subspecies before proceeding and add the
+concentration of the combined ion specie into the digest file.  For
+example with the following digest
+```
+   1 1024000 0.04802 "9EEF884627C74F17A9141F8BA3419417" "/Users/finnerty/Documents/Projects/grs400/calc/Na_channel/NaChBav/GRS1266" "" 0.230040  5 "Na" 0.000340 "Ka" 0.007080 "K1" 0.050640 "N1" 0.055950 "Cl" 0.116030
+```
+we increase the number of ion species from 5 to 7 (field 8) and insert
+the combined concentration of ``Na`` and ``N1`` with the ion label
+(e.g.) ``NN`` at the beginning of the list of ions.  Likewise with ``Ka`` and
+``K1`` to give ``KK``.  The concentration ratio (field 3) should be the ratio
+of the cations we are interested in determining the selectivity for.  They
+value is therefore in our case ``[NN]/[KK]``.
+```
+   1 1024000 0.9752252 "9EEF884627C74F17A9141F8BA3419417" "/Users/finnerty/Documents/Projects/grs400/calc/Na_channel/NaChBav/GRS1266" "" 0.230040  7 "NN" 0.05629 "KK" 0.05772 "Na" 0.000340 "Ka" 0.007080 "K1" 0.050640 "N1" 0.055950 "Cl" 0.116030
+```
+
+- The ``extract_selectivity.py`` program is used to calulate the selectivity
+based on a dose-response curve fit to the occupancies in the selectivity
+filter. It requires arguments for the (symmetric) sampling range, the two ion
+code names to compare and the name of the digest file.
+- The basic command line option flags to use are:
+ - occupancy measurement range (``[--start|-s]``, ``[--end|-e]``)
+  - If only ``-s`` is given then range will be symmetric range +/- of the given value.
+ - ion names (``[--ion1|-1]`` ``[--ion2|-2]``)
+ - title/key name (``[--key|-k]``) (optional)
+ - input file (``[--file|-f]``)
+
+Ion one should be the main comparison ion, in our case ``NN`` and ion two the
+test ion (``KK``).
+
+```
+extract_selectivity.py -s 1.25 -1 NN -2 KK -f digest.txt
+```
+This prints to the standard output the following row that gives the name of the
+digest file, the z-axis range, the two ion names, the resultant selectivity
+and the EC50 and Rmax for the first and then second ion.
+```
+Input, Range, Ion_1/Ion_2, Selectivity,  ConcMax_1, Ratio50_1,  ConcMax_2, Ratio50_2
+digest.txt ,  -1.25 : 1.25 ,  NN/KK ,  1.59179663631 ,  2.80055455961 ,  -0.281316373446 ,  1.43908670068 ,  0.234173501758
+```
+
+The lines used from the input file and the extracted occupancy data are printed to
+standard error.
+
+
+To calculate the fitted dose response curves use:
+
+- For the first ion (NN):  ``FilterConc(IonRatio) = ConcMax_1 / (1 + 10^(IonRatio - Ratio50_1)``
+- For the second ion (KK):  ``FilterConc(IonRatio) = ConcMax_2 / (1 + 10^(Ratio50_2 - IonRatio)``
+
+
+=== Future Development ===
+The extract_selectivity program internally has the capability to
+output statistical details of the curve fitting and different
+algorithms for calculating the selectivity.
+
+- Add command line option flags to output more detailed information
+ - Statistics of each curve fitting (--verbose)
+- Add command line for selectivity measurements
+ - Selectivity based on arithmetic mean concentration (default: --arith)
+ - Selectivity based on harmonic mean concentration (--harm)
+
+
+= END =
