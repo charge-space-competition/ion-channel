@@ -181,6 +181,14 @@ BUILD/unix).
   be used.  Look in the 'DOC' subdirectory for some basic
   instructions.  Look in the 'EXAMPLE' directory for some example
   input files.
+
+  For example:
+  $ cd ../../EXAMPLE
+  $ cat README
+  $ ../BUILD/unix/channel 1
+
+  (Wait for 7 days....
+   Maybe drink coffee??)
 _________________________________________________________________________
 
 + Frequent compilation errors +
