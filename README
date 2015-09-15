@@ -234,6 +234,11 @@ check that the specific library subdirectory is correct; for example
 (older) MKL library had subdirectories '32' 'em64t' and '64' for
 32 bit, 64 bit and ia64 versions.
 
+ATLAS tends to be installed in a variety of ways. If the atlas.mk
+variables don't pick up atlas, you may need to hard-code LAPACKLIB
+after 'include atlas.mk' to override the libraries to link and the
+path, as in 'LAPACKLIB:=-L/usr/lib64/atlas -lsatlas' for example.
+
 + Using another library +
 
 The program uses a fairly standard interface to Lapack and random
